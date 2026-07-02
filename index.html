@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HomPimPah Tracking</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7efe5;
+        --panel: #fffaf3;
+        --panel-strong: #f1dfc8;
+        --ink: #2d2118;
+        --muted: #775f4d;
+        --line: #d7bfa4;
+        --brand: #7b4f31;
+        --brand-dark: #51341f;
+        --success: #2e6848;
+        --danger: #9a342a;
+        --warning: #986515;
+        --shadow: 0 18px 40px rgba(81, 52, 31, 0.13);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .app {
+        min-height: 100vh;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px clamp(16px, 4vw, 44px);
+        background: rgba(247, 239, 229, 0.94);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(12px);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: clamp(22px, 3vw, 34px);
+        line-height: 1.1;
+      }
+
+      .brand p {
+        margin: 5px 0 0;
+        color: var(--muted);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 8px;
+        color: var(--ink);
+        background: var(--panel-strong);
+        border: 1px solid var(--line);
+        font-weight: 700;
+      }
+
+      .btn.primary {
+        color: #fffaf3;
+        background: var(--brand);
+        border-color: var(--brand);
+      }
+
+      .btn.danger {
+        color: #fffaf3;
+        background: var(--danger);
+        border-color: var(--danger);
+      }
+
+      .btn.ghost {
+        background: transparent;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(260px, 380px) 1fr;
+        gap: 18px;
+        padding: 22px clamp(16px, 4vw, 44px) 40px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .side {
+        align-self: start;
+        position: sticky;
+        top: 104px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-head h2,
+      .panel-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .panel-body {
+        padding: 16px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat {
+        padding: 13px;
+        border-radius: 8px;
+        background: #f4e7d7;
+        border: 1px solid var(--line);
+      }
+
+      .stat b {
+        display: block;
+        font-size: 22px;
+      }
+
+      .stat span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .filters {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--brand-dark);
+      }
+
+      .field input,
+      .field select,
+      .field textarea {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 11px;
+        background: #fffdf9;
+        color: var(--ink);
+      }
+
+      .field textarea {
+        resize: vertical;
+        min-height: 78px;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .order-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .order-card {
+        padding: 14px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #fffdf9;
+      }
+
+      .order-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .order-title {
+        margin: 0;
+        font-size: 17px;
+      }
+
+      .subtle {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .status.pending {
+        color: #5d3d02;
+        background: #f7d997;
+      }
+
+      .status.done {
+        color: #fff;
+        background: var(--success);
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 9px;
+        margin: 13px 0;
+      }
+
+      .meta div {
+        min-height: 54px;
+        padding: 9px;
+        border-radius: 8px;
+        background: #f8edde;
+        border: 1px solid #ead2b6;
+      }
+
+      .meta span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .meta b {
+        display: block;
+        margin-top: 3px;
+        font-size: 14px;
+      }
+
+      .items {
+        display: grid;
+        gap: 7px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .items li {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 0;
+        border-top: 1px solid #ead2b6;
+      }
+
+      .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .products {
+        display: grid;
+        gap: 9px;
+        margin-top: 14px;
+      }
+
+      .product {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fffdf9;
+      }
+
+      .product strong {
+        display: block;
+      }
+
+      .product small {
+        color: var(--muted);
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        background: rgba(45, 33, 24, 0.45);
+      }
+
+      .modal {
+        width: min(980px, 100%);
+        max-height: min(92vh, 900px);
+        overflow: auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 24px 70px rgba(45, 33, 24, 0.32);
+      }
+
+      .modal form {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .section {
+        display: grid;
+        gap: 11px;
+      }
+
+      .section h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .item-row {
+        display: grid;
+        grid-template-columns: 1.5fr 90px 1fr auto;
+        gap: 10px;
+        align-items: end;
+        padding: 10px;
+        border-radius: 8px;
+        background: #f8edde;
+        border: 1px solid #ead2b6;
+      }
+
+      .form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+        padding-top: 4px;
+      }
+
+      .notice {
+        padding: 12px;
+        border-radius: 8px;
+        background: #f7d997;
+        color: #5d3d02;
+        font-weight: 700;
+      }
+
+      .empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      .money {
+        font-variant-numeric: tabular-nums;
+      }
+
+      @media (max-width: 960px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .side {
+          position: static;
+        }
+
+        .meta {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .actions {
+          justify-content: stretch;
+        }
+
+        .actions .btn,
+        .form-actions .btn,
+        .card-actions .btn {
+          flex: 1 1 auto;
+        }
+
+        .grid-2,
+        .stats,
+        .meta,
+        .item-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const { useEffect, useMemo, useState } = React;
+      const STORAGE_KEY = "hompimpah-tracking-v1";
+      const DELIVERY_TYPES = ["Self pick up at biggledot", "Online delivery", "Expedition"];
+      const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const money = (value) =>
+        new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(value) || 0);
+      const today = () => new Date().toISOString().slice(0, 10);
+
+      const emptyProduct = { name: "", size: "", price: "", variation: "", stock: "", sku: "" };
+      const emptyOrder = {
+        status: "Pending",
+        pickupAgreement: DELIVERY_TYPES[0],
+        createdAt: today(),
+        customerName: "",
+        customerAddress: "",
+        customerPhone: "",
+        items: [{ productId: "", quantity: 1 }],
+      };
+
+      function loadData() {
+        try {
+          const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+          if (stored && Array.isArray(stored.products) && Array.isArray(stored.orders)) return stored;
+        } catch (error) {}
+        return { products: [], orders: [] };
+      }
+
+      function orderNumber(nextIndex) {
+        const date = new Date();
+        const stamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+        return `HP-${stamp}-${String(nextIndex).padStart(4, "0")}`;
+      }
+
+      function App() {
+        const [data, setData] = useState(loadData);
+        const [filter, setFilter] = useState("All");
+        const [search, setSearch] = useState("");
+        const [orderModal, setOrderModal] = useState(null);
+        const [productModal, setProductModal] = useState(null);
+
+        useEffect(() => {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }, [data]);
+
+        const totals = useMemo(() => {
+          const pending = data.orders.filter((order) => order.status === "Pending").length;
+          const done = data.orders.filter((order) => order.status === "Done").length;
+          const revenue = data.orders.filter((order) => order.status === "Done").reduce((sum, order) => sum + order.total, 0);
+          const lowStock = data.products.filter((product) => Number(product.stock) <= 3).length;
+          return { pending, done, revenue, lowStock };
+        }, [data]);
+
+        const filteredOrders = useMemo(() => {
+          const needle = search.trim().toLowerCase();
+          return data.orders
+            .filter((order) => filter === "All" || order.status === filter)
+            .filter((order) => {
+              if (!needle) return true;
+              return [order.number, order.customerName, order.customerPhone, order.pickupAgreement]
+                .join(" ")
+                .toLowerCase()
+                .includes(needle);
+            })
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        }, [data.orders, filter, search]);
+
+        function saveProduct(product) {
+          const normalized = {
+            ...product,
+            name: product.name.trim(),
+            size: product.size.trim(),
+            variation: product.variation.trim(),
+            price: Number(product.price),
+            stock: Number(product.stock),
+          };
+          const sku = normalized.sku.trim().toUpperCase();
+          if (!normalized.name || !sku || !Number.isFinite(normalized.price) || normalized.price < 0 || !Number.isFinite(normalized.stock) || normalized.stock < 0) {
+            alert("Product name, price, stock, and SKU are mandatory. Price and stock must be valid numbers.");
+            return;
+          }
+
+          const others = data.products.filter((item) => item.id !== normalized.id);
+          if (others.some((item) => item.sku === sku)) {
+            alert("SKU must be unique.");
+            return;
+          }
+
+          setData((current) => {
+            const saved = { ...normalized, sku, id: normalized.id || uid() };
+            return { ...current, products: normalized.id ? current.products.map((item) => (item.id === normalized.id ? saved : item)) : [saved, ...current.products] };
+          });
+          setProductModal(null);
+        }
+
+        function orderQuantities(order) {
+          return order.items.reduce((map, item) => {
+            map[item.productId] = (map[item.productId] || 0) + Number(item.quantity || 0);
+            return map;
+          }, {});
+        }
+
+        function stockWithPrevious(current, previousOrder) {
+          if (!previousOrder) return current.products;
+          const previous = orderQuantities(previousOrder);
+          return current.products.map((product) => ({ ...product, stock: Number(product.stock) + Number(previous[product.id] || 0) }));
+        }
+
+        function saveOrder(formOrder) {
+          const hasProduct = formOrder.items.some((item) => item.productId && Number(item.quantity) > 0);
+          if (!hasProduct || !formOrder.pickupAgreement || !formOrder.createdAt) {
+            alert("Order items, pickup agreement, and date order created are mandatory.");
+            return;
+          }
+
+          const previousOrder = data.orders.find((order) => order.id === formOrder.id);
+          const productsRestored = stockWithPrevious(data, previousOrder);
+          const cleanItems = formOrder.items
+            .filter((item) => item.productId && Number(item.quantity) > 0)
+            .map((item) => {
+              const product = productsRestored.find((entry) => entry.id === item.productId);
+              return {
+                productId: item.productId,
+                name: product.name,
+                sku: product.sku,
+                size: product.size,
+                variation: product.variation,
+                price: Number(product.price),
+                quantity: Number(item.quantity),
+                lineTotal: Number(product.price) * Number(item.quantity),
+              };
+            });
+
+          const requested = cleanItems.reduce((map, item) => {
+            map[item.productId] = (map[item.productId] || 0) + item.quantity;
+            return map;
+          }, {});
+          const outOfStock = productsRestored.find((product) => Number(product.stock) < Number(requested[product.id] || 0));
+          if (outOfStock) {
+            alert(`${outOfStock.name} does not have enough stock.`);
+            return;
+          }
+
+          setData((current) => {
+            const previousOrder = current.orders.find((order) => order.id === formOrder.id);
+            const productsRestored = stockWithPrevious(current, previousOrder);
+            const cleanItems = formOrder.items
+              .filter((item) => item.productId && Number(item.quantity) > 0)
+              .map((item) => {
+                const product = productsRestored.find((entry) => entry.id === item.productId);
+                return {
+                  productId: item.productId,
+                  name: product.name,
+                  sku: product.sku,
+                  size: product.size,
+                  variation: product.variation,
+                  price: Number(product.price),
+                  quantity: Number(item.quantity),
+                  lineTotal: Number(product.price) * Number(item.quantity),
+                };
+              });
+
+            const requested = cleanItems.reduce((map, item) => {
+              map[item.productId] = (map[item.productId] || 0) + item.quantity;
+              return map;
+            }, {});
+            const products = productsRestored.map((product) => ({ ...product, stock: Number(product.stock) - Number(requested[product.id] || 0) }));
+            const total = cleanItems.reduce((sum, item) => sum + item.lineTotal, 0);
+            const saved = {
+              ...formOrder,
+              id: formOrder.id || uid(),
+              number: formOrder.number || orderNumber(current.orders.length + 1),
+              items: cleanItems,
+              total,
+            };
+            const orders = previousOrder ? current.orders.map((order) => (order.id === saved.id ? saved : order)) : [saved, ...current.orders];
+            return { products, orders };
+          });
+          setOrderModal(null);
+        }
+
+        function deleteOrder(order) {
+          if (!confirm(`Delete ${order.number}? Stock will be returned to products.`)) return;
+          setData((current) => {
+            const restored = stockWithPrevious(current, order);
+            return { products: restored, orders: current.orders.filter((item) => item.id !== order.id) };
+          });
+        }
+
+        return (
+          React.createElement("div", { className: "app" },
+            React.createElement("header", { className: "topbar" },
+              React.createElement("div", { className: "brand" },
+                React.createElement("h1", null, "HomPimPah Tracking"),
+                React.createElement("p", null, "Order and merch stock tracking for fast-paced selling.")
+              ),
+              React.createElement("div", { className: "actions" },
+                React.createElement("button", { className: "btn", onClick: () => setProductModal({ ...emptyProduct }) }, "+ Product"),
+                React.createElement("button", { className: "btn primary", disabled: data.products.length === 0, onClick: () => setOrderModal({ ...emptyOrder }) }, "+ Order")
+              )
+            ),
+            React.createElement("main", null,
+              React.createElement("aside", { className: "panel side" },
+                React.createElement("div", { className: "panel-head" }, React.createElement("h2", null, "Dashboard")),
+                React.createElement("div", { className: "panel-body" },
+                  React.createElement("div", { className: "stats" },
+                    React.createElement(Stat, { label: "Pending", value: totals.pending }),
+                    React.createElement(Stat, { label: "Done", value: totals.done }),
+                    React.createElement(Stat, { label: "Paid revenue", value: money(totals.revenue) }),
+                    React.createElement(Stat, { label: "Low stock", value: totals.lowStock })
+                  ),
+                  React.createElement("div", { className: "filters" },
+                    React.createElement("div", { className: "field" },
+                      React.createElement("label", null, "Search orders"),
+                      React.createElement("input", { value: search, onChange: (event) => setSearch(event.target.value), placeholder: "Order no, customer, phone" })
+                    ),
+                    React.createElement("div", { className: "field" },
+                      React.createElement("label", null, "Status filter"),
+                      React.createElement("select", { value: filter, onChange: (event) => setFilter(event.target.value) },
+                        ["All", "Pending", "Done"].map((option) => React.createElement("option", { key: option }, option))
+                      )
+                    )
+                  ),
+                  React.createElement(ProductList, { products: data.products, onEdit: setProductModal })
+                )
+              ),
+              React.createElement("section", { className: "panel" },
+                React.createElement("div", { className: "panel-head" },
+                  React.createElement("h2", null, "Orders"),
+                  React.createElement("span", { className: "subtle" }, `${filteredOrders.length} shown`)
+                ),
+                React.createElement("div", { className: "panel-body order-list" },
+                  data.products.length === 0 && React.createElement("div", { className: "notice" }, "Add at least one product before creating an order."),
+                  filteredOrders.length === 0
+                    ? React.createElement("div", { className: "empty" }, "No orders yet.")
+                    : filteredOrders.map((order) => React.createElement(OrderCard, { key: order.id, order, onEdit: setOrderModal, onDelete: deleteOrder }))
+                )
+              )
+            ),
+            productModal && React.createElement(ProductModal, { product: productModal, onClose: () => setProductModal(null), onSave: saveProduct }),
+            orderModal && React.createElement(OrderModal, { order: orderModal, products: data.products, onClose: () => setOrderModal(null), onSave: saveOrder })
+          )
+        );
+      }
+
+      function Stat({ label, value }) {
+        return React.createElement("div", { className: "stat" }, React.createElement("b", null, value), React.createElement("span", null, label));
+      }
+
+      function ProductList({ products, onEdit }) {
+        return React.createElement("div", { className: "products" },
+          React.createElement("div", { className: "panel-head", style: { padding: 0, border: 0 } },
+            React.createElement("h3", null, "Products"),
+            React.createElement("span", { className: "subtle" }, `${products.length} total`)
+          ),
+          products.length === 0
+            ? React.createElement("div", { className: "empty" }, "No products.")
+            : products.map((product) =>
+                React.createElement("div", { className: "product", key: product.id },
+                  React.createElement("div", null,
+                    React.createElement("strong", null, product.name),
+                    React.createElement("small", null, `${product.sku} | ${product.size || "No size"} | ${product.variation || "No variation"} | ${money(product.price)}`)
+                  ),
+                  React.createElement("div", { style: { textAlign: "right" } },
+                    React.createElement("strong", null, product.stock),
+                    React.createElement("button", { className: "btn ghost", onClick: () => onEdit(product), style: { minHeight: 30, padding: "0 8px" } }, "Edit")
+                  )
+                )
+              )
+        );
+      }
+
+      function OrderCard({ order, onEdit, onDelete }) {
+        return React.createElement("article", { className: "order-card" },
+          React.createElement("div", { className: "order-top" },
+            React.createElement("div", null,
+              React.createElement("h3", { className: "order-title" }, order.number),
+              React.createElement("div", { className: "subtle" }, `${order.customerName || "No customer name"} | ${order.customerPhone || "No phone"}`)
+            ),
+            React.createElement("span", { className: `status ${order.status.toLowerCase()}` }, order.status)
+          ),
+          React.createElement("div", { className: "meta" },
+            React.createElement(Meta, { label: "Total", value: money(order.total) }),
+            React.createElement(Meta, { label: "Created", value: order.createdAt }),
+            React.createElement(Meta, { label: "Agreement", value: order.pickupAgreement }),
+            React.createElement(Meta, { label: "Address", value: order.customerAddress || "-" })
+          ),
+          React.createElement("ul", { className: "items" },
+            order.items.map((item, index) =>
+              React.createElement("li", { key: `${item.productId}-${index}` },
+                React.createElement("span", null, `${item.name} x ${item.quantity}`, React.createElement("br"), React.createElement("span", { className: "subtle" }, `${item.sku} | ${item.size || "-"} | ${item.variation || "-"}`)),
+                React.createElement("strong", { className: "money" }, money(item.lineTotal))
+              )
+            )
+          ),
+          order.status === "Pending"
+            ? React.createElement("div", { className: "card-actions" },
+                React.createElement("button", { className: "btn", onClick: () => onEdit(order) }, "Edit"),
+                React.createElement("button", { className: "btn danger", onClick: () => onDelete(order) }, "Delete")
+              )
+            : React.createElement("div", { className: "subtle", style: { marginTop: 12 } }, "Completed order")
+        );
+      }
+
+      function Meta({ label, value }) {
+        return React.createElement("div", null, React.createElement("span", null, label), React.createElement("b", null, value));
+      }
+
+      function ProductModal({ product, onSave, onClose }) {
+        const [form, setForm] = useState(product);
+        const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+        return React.createElement("div", { className: "modal-backdrop" },
+          React.createElement("div", { className: "modal" },
+            React.createElement("div", { className: "panel-head" },
+              React.createElement("h2", null, form.id ? "Edit Product" : "Add Product"),
+              React.createElement("button", { className: "btn ghost", onClick: onClose }, "Close")
+            ),
+            React.createElement("form", { onSubmit: (event) => { event.preventDefault(); onSave(form); } },
+              React.createElement("div", { className: "grid-2" },
+                React.createElement(Field, { label: "Product name *", value: form.name, onChange: (value) => update("name", value), required: true }),
+                React.createElement(Field, { label: "SKU *", value: form.sku, onChange: (value) => update("sku", value), required: true }),
+                React.createElement(Field, { label: "Size", value: form.size, onChange: (value) => update("size", value) }),
+                React.createElement(Field, { label: "Variation", value: form.variation, onChange: (value) => update("variation", value) }),
+                React.createElement(Field, { label: "Price *", type: "number", min: "0", value: form.price, onChange: (value) => update("price", value), required: true }),
+                React.createElement(Field, { label: "Stock *", type: "number", min: "0", value: form.stock, onChange: (value) => update("stock", value), required: true })
+              ),
+              React.createElement("div", { className: "form-actions" },
+                React.createElement("button", { type: "button", className: "btn", onClick: onClose }, "Cancel"),
+                React.createElement("button", { className: "btn primary" }, "Save Product")
+              )
+            )
+          )
+        );
+      }
+
+      function OrderModal({ order, products, onSave, onClose }) {
+        const [form, setForm] = useState({
+          ...order,
+          items: order.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        });
+        const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+        const updateItem = (index, key, value) => {
+          setForm((current) => ({
+            ...current,
+            items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
+          }));
+        };
+        const selectedTotal = form.items.reduce((sum, item) => {
+          const product = products.find((entry) => entry.id === item.productId);
+          return sum + (Number(product?.price || 0) * Number(item.quantity || 0));
+        }, 0);
+
+        return React.createElement("div", { className: "modal-backdrop" },
+          React.createElement("div", { className: "modal" },
+            React.createElement("div", { className: "panel-head" },
+              React.createElement("h2", null, form.id ? `Edit ${form.number}` : "Add Order"),
+              React.createElement("button", { className: "btn ghost", onClick: onClose }, "Close")
+            ),
+            React.createElement("form", { onSubmit: (event) => { event.preventDefault(); onSave(form); } },
+              React.createElement("div", { className: "section" },
+                React.createElement("h3", null, "Order Items *"),
+                form.items.map((item, index) =>
+                  React.createElement("div", { className: "item-row", key: index },
+                    React.createElement("div", { className: "field" },
+                      React.createElement("label", null, "Product"),
+                      React.createElement("select", { value: item.productId, required: true, onChange: (event) => updateItem(index, "productId", event.target.value) },
+                        React.createElement("option", { value: "" }, "Choose product"),
+                        products.map((product) => React.createElement("option", { key: product.id, value: product.id }, `${product.name} (${product.stock} stock) - ${money(product.price)}`))
+                      )
+                    ),
+                    React.createElement(Field, { label: "Qty", type: "number", min: "1", value: item.quantity, onChange: (value) => updateItem(index, "quantity", value), required: true }),
+                    React.createElement("div", { className: "field" },
+                      React.createElement("label", null, "Line total"),
+                      React.createElement("input", { readOnly: true, value: money(Number(products.find((entry) => entry.id === item.productId)?.price || 0) * Number(item.quantity || 0)) })
+                    ),
+                    React.createElement("button", { type: "button", className: "btn danger", disabled: form.items.length === 1, onClick: () => setForm((current) => ({ ...current, items: current.items.filter((_, itemIndex) => itemIndex !== index) })) }, "Remove")
+                  )
+                ),
+                React.createElement("button", { type: "button", className: "btn", onClick: () => setForm((current) => ({ ...current, items: [...current.items, { productId: "", quantity: 1 }] })) }, "+ Add Item")
+              ),
+              React.createElement("div", { className: "grid-2" },
+                React.createElement("div", { className: "field" },
+                  React.createElement("label", null, "Order status *"),
+                  React.createElement("select", { value: form.status, onChange: (event) => update("status", event.target.value), required: true },
+                    React.createElement("option", null, "Pending"),
+                    React.createElement("option", null, "Done")
+                  )
+                ),
+                React.createElement("div", { className: "field" },
+                  React.createElement("label", null, "Pick up agreement *"),
+                  React.createElement("select", { value: form.pickupAgreement, onChange: (event) => update("pickupAgreement", event.target.value), required: true },
+                    DELIVERY_TYPES.map((type) => React.createElement("option", { key: type }, type))
+                  )
+                ),
+                React.createElement(Field, { label: "Date order created *", type: "date", value: form.createdAt, onChange: (value) => update("createdAt", value), required: true }),
+                React.createElement("div", { className: "field" },
+                  React.createElement("label", null, "Total order price *"),
+                  React.createElement("input", { readOnly: true, value: money(selectedTotal) })
+                )
+              ),
+              React.createElement("div", { className: "section" },
+                React.createElement("h3", null, "Customer Info"),
+                React.createElement("div", { className: "grid-2" },
+                  React.createElement(Field, { label: "Name", value: form.customerName, onChange: (value) => update("customerName", value) }),
+                  React.createElement(Field, { label: "Phone no", value: form.customerPhone, onChange: (value) => update("customerPhone", value) })
+                ),
+                React.createElement("div", { className: "field" },
+                  React.createElement("label", null, "Address"),
+                  React.createElement("textarea", { value: form.customerAddress, onChange: (event) => update("customerAddress", event.target.value) })
+                )
+              ),
+              React.createElement("div", { className: "form-actions" },
+                React.createElement("strong", { className: "money", style: { marginRight: "auto", alignSelf: "center" } }, `Total: ${money(selectedTotal)}`),
+                React.createElement("button", { type: "button", className: "btn", onClick: onClose }, "Cancel"),
+                React.createElement("button", { className: "btn primary" }, "Save Order")
+              )
+            )
+          )
+        );
+      }
+
+      function Field({ label, value, onChange, type = "text", ...props }) {
+        return React.createElement("div", { className: "field" },
+          React.createElement("label", null, label),
+          React.createElement("input", { type, value, onChange: (event) => onChange(event.target.value), ...props })
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+    </script>
+  </body>
+</html>

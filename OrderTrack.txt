@@ -1,0 +1,29 @@
+Application Name : HomPimPah Tracking
+
+HomPimPah Tracking is an order tracking web customized for a brand that sells merch. this brand sells self design & produce merch.
+the user want to be able to track this parameter :
+- *Order Number (autogenerate)
+- *Order Items Detail (Item name, quantity, total price of each item * quantity)
+- *Total order price
+- *Order status :
+    1. Pending : recent incoming order and is unpaid
+    2. Done : Order that have been paid & (picked up / sent)
+- *pick up agreement : self pick up at biggledot / online delivery / expedition
+- *date order created
+- customer info (Name, address, phone no)
+
+Features : 
+- Add new order
+- edit on going order
+- delete on going Order
+- add product (*product name, size , *price, variation, *stock, *SKU)
+- auto update product stock when ordered
+- fully responsive for computer or mobile
+
+Notes : 
+- every parameter that has * marked as mandatory
+- Ensure user-friendly interface (easy to use in fast paced environment)
+- Data size is small, use a local storage (file or txt file, or anything that does not require additional library or extension)
+- brown/light brown based theme
+- do multiple QA test ensuring every feature works correctly
+- build with react js
