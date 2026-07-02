@@ -27,3 +27,9 @@ Notes :
 - brown/light brown based theme
 - do multiple QA test ensuring every feature works correctly
 - build with react js
+
+=======================================================================
+
+Revision 1
+- Supabase Integration
+- Project reconstruction into vite react project
