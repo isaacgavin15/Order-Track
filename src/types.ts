@@ -68,3 +68,25 @@ export type OrderForm = {
   customer_phone: string;
   items: OrderFormItem[];
 };
+
+export type ProductImportRow = {
+  source_file: string;
+  sheet_name: string;
+  row_number: number;
+  name: string;
+  sku: string;
+  size: string;
+  variation: string;
+  price: number | null;
+  stock: number | null;
+  errors: string[];
+};
+
+export type ProductInsert = {
+  name: string;
+  sku: string;
+  size: string | null;
+  variation: string | null;
+  price: number;
+  stock: number;
+};

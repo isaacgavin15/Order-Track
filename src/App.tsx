@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './utils/supabase';
-import type { Order, OrderForm, OrderFormItem, PickupAgreement, Product, ProductForm } from './types';
+import { parseProductExcelFiles, productImportRowsToInserts, validateProductImportRows } from './utils/productImport';
+import type { Order, OrderForm, OrderFormItem, PickupAgreement, Product, ProductForm, ProductImportRow, ProductInsert } from './types';
 
 const DELIVERY_TYPES: PickupAgreement[] = ['Self pick up at biggledot', 'Online delivery', 'Expedition'];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -31,6 +32,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [orderModal, setOrderModal] = useState<OrderForm | null>(null);
   const [productModal, setProductModal] = useState<ProductForm | null>(null);
+  const [bulkProductModal, setBulkProductModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -130,6 +132,43 @@ export default function App() {
     await loadData();
   }
 
+  async function deleteProduct(product: Product) {
+    if (!confirm(`Delete product ${product.name} (${product.sku})?`)) return;
+
+    setBusy(true);
+    setError('');
+    const { error: deleteError } = await supabase.from('products').delete().eq('id', product.id);
+    setBusy(false);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function bulkInsertProducts(productInserts: ProductInsert[]) {
+    if (productInserts.length === 0) {
+      alert('No valid products to import.');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    const { error: insertError } = await supabase.from('products').insert(productInserts);
+    setBusy(false);
+
+    if (insertError) {
+      setError(insertError.message);
+      return false;
+    }
+
+    setBulkProductModal(false);
+    await loadData();
+    return true;
+  }
+
   async function saveOrder(formOrder: OrderForm) {
     const cleanItems = formOrder.items
       .filter((item) => item.product_id && Number(item.quantity) > 0)
@@ -137,6 +176,12 @@ export default function App() {
 
     if (!cleanItems.length || !formOrder.pickup_agreement || !formOrder.date_order_created) {
       alert('Order items, pickup agreement, and date order created are mandatory.');
+      return;
+    }
+
+    const productIds = cleanItems.map((item) => item.product_id);
+    if (new Set(productIds).size !== productIds.length) {
+      alert('Each product can only be listed once in the same order.');
       return;
     }
 
@@ -198,6 +243,7 @@ export default function App() {
           <p>Order and merch stock tracking for fast-paced selling.</p>
         </div>
         <div className="actions">
+          <button className="btn" onClick={() => setBulkProductModal(true)}>Bulk Upload</button>
           <button className="btn" onClick={() => setProductModal({ ...emptyProduct })}>+ Product</button>
           <button className="btn primary" disabled={products.length === 0} onClick={() => setOrderModal({ ...emptyOrder })}>+ Order</button>
           <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
@@ -230,7 +276,12 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <ProductList products={products} onEdit={(product) => setProductModal(productToForm(product))} />
+            <ProductList
+              products={products}
+              busy={busy}
+              onEdit={(product) => setProductModal(productToForm(product))}
+              onDelete={deleteProduct}
+            />
           </div>
         </aside>
 
@@ -256,6 +307,14 @@ export default function App() {
       </main>
 
       {productModal && <ProductModal product={productModal} busy={busy} onClose={() => setProductModal(null)} onSave={saveProduct} />}
+      {bulkProductModal && (
+        <BulkProductModal
+          busy={busy}
+          existingSkus={products.map((product) => product.sku)}
+          onClose={() => setBulkProductModal(false)}
+          onImport={bulkInsertProducts}
+        />
+      )}
       {orderModal && <OrderModal order={orderModal} products={products} busy={busy} onClose={() => setOrderModal(null)} onSave={saveOrder} />}
     </div>
   );
@@ -334,7 +393,17 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function ProductList({ products, onEdit }: { products: Product[]; onEdit: (product: Product) => void }) {
+function ProductList({
+  products,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  products: Product[];
+  busy: boolean;
+  onEdit: (product: Product) => void;
+  onDelete: (product: Product) => void;
+}) {
   return (
     <div className="products">
       <div className="panel-head compact-head">
@@ -352,7 +421,10 @@ function ProductList({ products, onEdit }: { products: Product[]; onEdit: (produ
             </div>
             <div className="product-stock">
               <strong>{product.stock}</strong>
-              <button className="btn ghost small-btn" onClick={() => onEdit(product)}>Edit</button>
+              <div className="product-actions">
+                <button className="btn ghost small-btn" disabled={busy} onClick={() => onEdit(product)}>Edit</button>
+                <button className="btn danger small-btn" disabled={busy} onClick={() => onDelete(product)}>Delete</button>
+              </div>
             </div>
           </div>
         ))
@@ -440,6 +512,121 @@ function ProductModal({ product, busy, onSave, onClose }: { product: ProductForm
   );
 }
 
+function BulkProductModal({
+  busy,
+  existingSkus,
+  onImport,
+  onClose,
+}: {
+  busy: boolean;
+  existingSkus: string[];
+  onImport: (products: ProductInsert[]) => Promise<boolean | undefined>;
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<ProductImportRow[]>([]);
+  const [parsing, setParsing] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const totalErrors = rows.reduce((total, row) => total + row.errors.length, 0);
+  const validRows = rows.filter((row) => row.errors.length === 0);
+
+  async function handleFiles(files: FileList | null) {
+    const selectedFiles = Array.from(files || []);
+    setMessage('');
+
+    if (selectedFiles.length === 0) {
+      setRows([]);
+      return;
+    }
+
+    setParsing(true);
+    try {
+      const parsedRows = await parseProductExcelFiles(selectedFiles);
+      setRows(validateProductImportRows(parsedRows, existingSkus));
+    } catch (error) {
+      setRows([]);
+      setMessage(error instanceof Error ? error.message : 'Failed to read Excel file.');
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  async function importProducts() {
+    const imported = await onImport(productImportRowsToInserts(validRows));
+    if (imported) setRows([]);
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal wide-modal">
+        <div className="panel-head">
+          <div>
+            <h2>Bulk Upload Products</h2>
+            <span className="subtle">Accepted headers: Product Name*, SKU*, Size, Variation, Price*, Stock*</span>
+          </div>
+          <button className="btn ghost" onClick={onClose}>Close</button>
+        </div>
+        <div className="modal-content">
+          {message && <div className="notice error">{message}</div>}
+          <div className="field">
+            <label>Excel files</label>
+            <input type="file" accept=".xlsx,.xls" multiple onChange={(event) => handleFiles(event.target.files)} />
+          </div>
+          <div className="import-summary">
+            <span>{rows.length} rows found</span>
+            <span>{validRows.length} ready</span>
+            <span>{totalErrors} errors</span>
+          </div>
+          <div className="table-wrap">
+            <table className="import-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Row</th>
+                  <th>Product Name</th>
+                  <th>SKU</th>
+                  <th>Size</th>
+                  <th>Variation</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="empty-cell">Choose one or more Excel files to preview products.</td>
+                  </tr>
+                ) : (
+                  rows.map((row, index) => (
+                    <tr key={`${row.source_file}-${row.sheet_name}-${row.row_number}-${index}`} className={row.errors.length ? 'invalid-row' : ''}>
+                      <td>{row.source_file}<br /><span className="subtle">{row.sheet_name}</span></td>
+                      <td>{row.row_number}</td>
+                      <td>{row.name || '-'}</td>
+                      <td>{row.sku || '-'}</td>
+                      <td>{row.size || '-'}</td>
+                      <td>{row.variation || '-'}</td>
+                      <td>{row.price === null ? '-' : money(row.price)}</td>
+                      <td>{row.stock === null ? '-' : row.stock}</td>
+                      <td>{row.errors.length ? row.errors.join(' ') : 'Ready'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn primary" disabled={busy || parsing || rows.length === 0 || totalErrors > 0} onClick={importProducts}>
+              {busy ? 'Importing...' : parsing ? 'Reading...' : `Import ${validRows.length} Products`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderForm; products: Product[]; busy: boolean; onSave: (order: OrderForm) => void; onClose: () => void }) {
   const [form, setForm] = useState(order);
   const update = (key: keyof OrderForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
@@ -453,6 +640,8 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
     const product = products.find((entry) => entry.id === item.product_id);
     return sum + (Number(product?.price || 0) * Number(item.quantity || 0));
   }, 0);
+  const selectedProductIds = form.items.map((item) => item.product_id).filter(Boolean);
+  const canAddItem = selectedProductIds.length < products.length;
 
   return (
     <div className="modal-backdrop">
@@ -470,7 +659,9 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
                   <label>Product</label>
                   <select value={item.product_id} required onChange={(event) => updateItem(index, 'product_id', event.target.value)}>
                     <option value="">Choose product</option>
-                    {products.map((product) => (
+                    {products
+                      .filter((product) => product.id === item.product_id || !selectedProductIds.includes(product.id))
+                      .map((product) => (
                       <option key={product.id} value={product.id}>{product.name} ({product.stock} stock) - {money(product.price)}</option>
                     ))}
                   </select>
@@ -490,7 +681,14 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
                 </button>
               </div>
             ))}
-            <button type="button" className="btn" onClick={() => setForm((current) => ({ ...current, items: [...current.items, { product_id: '', quantity: 1 }] }))}>+ Add Item</button>
+            <button
+              type="button"
+              className="btn"
+              disabled={!canAddItem}
+              onClick={() => setForm((current) => ({ ...current, items: [...current.items, { product_id: '', quantity: 1 }] }))}
+            >
+              + Add Item
+            </button>
           </div>
 
           <div className="grid-2">

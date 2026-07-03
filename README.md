@@ -29,6 +29,8 @@ The app reads Supabase settings from `.env`.
 - `src/utils/supabase.ts` creates the Supabase client.
 - `src/App.tsx` loads products and orders from Supabase.
 - Products are inserted and updated through the `products` table.
+- Products can be bulk imported from one or more Excel workbooks. Every sheet must use the `productList.xlsx` headers:
+  `Product Name*`, `SKU*`, `Size`, `Variation`, `Price*`, `Stock*`.
 - Orders are created, edited, and deleted through SQL RPC functions.
 - Stock changes happen inside Supabase transactions through:
   - `create_order`
@@ -40,8 +42,14 @@ The app reads Supabase settings from `.env`.
 - Sign in with a Supabase Auth user.
 - Add product with mandatory product name, price, stock, and SKU.
 - Reject product with missing mandatory fields or duplicate SKU.
+- Delete an unused product.
+- Confirm products already used by orders are protected from deletion by the database.
+- Bulk upload products from Excel.
+- Confirm bulk upload supports multiple files and multiple sheets per file.
+- Confirm bulk upload rejects wrong headers, missing mandatory fields, invalid price/stock, duplicate uploaded SKUs, and SKUs already in products.
 - Add order only after products exist.
 - Add one or more order items and verify line totals plus total order price.
+- Confirm a product can only be selected once in the same order.
 - Confirm stock decreases after saving an order.
 - Edit a Pending order and confirm previous stock is restored before the new quantity is deducted.
 - Delete a Pending order and confirm stock is returned.

@@ -104,6 +104,15 @@ begin
     raise exception 'Order must contain at least one item.';
   end if;
 
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) item
+    group by item->>'product_id'
+    having count(*) > 1
+  ) then
+    raise exception 'Each product can only be listed once in the same order.';
+  end if;
+
   v_order_number := generate_order_number();
 
   insert into orders (
@@ -221,6 +230,15 @@ begin
 
   if jsonb_array_length(p_items) = 0 then
     raise exception 'Order must contain at least one item.';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_items) item
+    group by item->>'product_id'
+    having count(*) > 1
+  ) then
+    raise exception 'Each product can only be listed once in the same order.';
   end if;
 
   for v_old_item in select * from order_items where order_id = p_order_id
