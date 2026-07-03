@@ -662,7 +662,7 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
                     {products
                       .filter((product) => product.id === item.product_id || !selectedProductIds.includes(product.id))
                       .map((product) => (
-                      <option key={product.id} value={product.id}>{product.name} ({product.stock} stock) - {money(product.price)}</option>
+                      <option key={product.id} value={product.id}>{product.name} - {product.variation} - ({product.stock} stock) - {money(product.price)}</option>
                     ))}
                   </select>
                 </div>
