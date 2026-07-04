@@ -31,6 +31,11 @@ Public stock tracking page:
 ```
 
 This page does not require login and is intended for direct customer access.
+On Vercel, direct visits work through `vercel.json` rewrites:
+
+```text
+https://order-track-plum.vercel.app/StockTrack
+```
 
 ## Supabase Integration
 
