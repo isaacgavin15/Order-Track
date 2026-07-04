@@ -204,9 +204,77 @@ main {
   margin-top: 14px;
 }
 
+.order-controls {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.segmented {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(74px, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.segmented button {
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--brand-dark);
+  background: transparent;
+  border-right: 1px solid var(--line);
+  font-weight: 800;
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented button.active {
+  color: #fffaf3;
+  background: var(--brand);
+}
+
+.date-filter {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.order-search {
+  min-width: 220px;
+}
+
+.daily-stats {
+  margin-top: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .field {
   display: grid;
   gap: 6px;
+}
+
+.field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-header .subtle {
+  margin-left: auto;
 }
 
 .field label {
@@ -230,6 +298,54 @@ main {
 .field textarea {
   resize: vertical;
   min-height: 78px;
+}
+
+.autocomplete-field {
+  position: relative;
+}
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf9;
+  box-shadow: 0 16px 34px rgba(81, 52, 31, 0.18);
+}
+
+.suggestion {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 10px;
+  color: var(--ink);
+  background: transparent;
+  border-bottom: 1px solid #ead2b6;
+  text-align: left;
+}
+
+.suggestion:hover,
+.suggestion:focus-visible {
+  background: #f8edde;
+}
+
+.suggestion:last-child {
+  border-bottom: 0;
+}
+
+.suggestion span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.empty-suggestion {
+  color: var(--muted);
+  cursor: default;
 }
 
 .grid-2 {
@@ -378,6 +494,19 @@ main {
   margin-top: 6px;
 }
 
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.load-more {
+  justify-self: center;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -454,6 +583,10 @@ main {
   background: #f7d997;
   color: #5d3d02;
   font-weight: 700;
+}
+
+.compact-notice {
+  margin-top: 12px;
 }
 
 .notice.error {
@@ -558,9 +691,16 @@ main {
   }
 
   .grid-2,
+  .daily-stats,
   .stats,
   .meta,
   .item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .order-controls,
+  .date-filter {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }

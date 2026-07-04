@@ -54,6 +54,7 @@ export type ProductForm = {
 
 export type OrderFormItem = {
   product_id: string;
+  product_query: string;
   quantity: string | number;
 };
 

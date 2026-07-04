@@ -5,6 +5,8 @@ import { parseProductExcelFiles, productImportRowsToInserts, validateProductImpo
 import type { Order, OrderForm, OrderFormItem, PickupAgreement, Product, ProductForm, ProductImportRow, ProductInsert } from './types';
 
 const DELIVERY_TYPES: PickupAgreement[] = ['Self pick up at biggledot', 'Online delivery', 'Expedition'];
+const PRODUCTS_PER_PAGE = 10;
+const ORDERS_PER_LOAD = 10;
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (value: number | string | null | undefined) =>
   new Intl.NumberFormat('id-ID', {
@@ -12,6 +14,8 @@ const money = (value: number | string | null | undefined) =>
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(Number(value) || 0);
+const productOptionLabel = (product: Product) =>
+  `${product.sku} - ${product.name} - ${product.variation || 'No variation'} - (${product.stock} stock) - ${money(product.price)}`;
 
 const emptyProduct: ProductForm = { name: '', size: '', price: '', variation: '', stock: '', sku: '' };
 const emptyOrder: OrderForm = {
@@ -21,7 +25,7 @@ const emptyOrder: OrderForm = {
   customer_name: '',
   customer_address: '',
   customer_phone: '',
-  items: [{ product_id: '', quantity: 1 }],
+  items: [{ product_id: '', product_query: '', quantity: 1 }],
 };
 
 export default function App() {
@@ -30,6 +34,10 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState<'All' | 'Pending' | 'Done'>('All');
   const [search, setSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const [orderDateFilter, setOrderDateFilter] = useState('');
+  const [visibleOrderCount, setVisibleOrderCount] = useState(ORDERS_PER_LOAD);
   const [orderModal, setOrderModal] = useState<OrderForm | null>(null);
   const [productModal, setProductModal] = useState<ProductForm | null>(null);
   const [bulkProductModal, setBulkProductModal] = useState(false);
@@ -60,6 +68,14 @@ export default function App() {
     void loadData();
   }, [session]);
 
+  useEffect(() => {
+    setProductPage(1);
+  }, [productSearch]);
+
+  useEffect(() => {
+    setVisibleOrderCount(ORDERS_PER_LOAD);
+  }, [filter, orderDateFilter, search]);
+
   async function loadData() {
     setError('');
     const [productsResult, ordersResult] = await Promise.all([
@@ -80,18 +96,25 @@ export default function App() {
     setOrders((ordersResult.data || []) as Order[]);
   }
 
-  const totals = useMemo(() => {
-    const pending = orders.filter((order) => order.status === 'Pending').length;
-    const done = orders.filter((order) => order.status === 'Done').length;
-    const revenue = orders.filter((order) => order.status === 'Done').reduce((sum, order) => sum + Number(order.total_price), 0);
-    const lowStock = products.filter((product) => Number(product.stock) <= 3).length;
-    return { pending, done, revenue, lowStock };
-  }, [orders, products]);
+  const sortedProducts = useMemo(
+    () => [...products].sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: 'base' })),
+    [products],
+  );
+
+  const filteredProducts = useMemo(() => {
+    const needle = productSearch.trim().toLowerCase();
+    if (!needle) return sortedProducts;
+    return sortedProducts.filter((product) => [product.name, product.sku].join(' ').toLowerCase().includes(needle));
+  }, [productSearch, sortedProducts]);
+  const productPageCount = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const currentProductPage = Math.min(productPage, productPageCount);
+  const paginatedProducts = filteredProducts.slice((currentProductPage - 1) * PRODUCTS_PER_PAGE, currentProductPage * PRODUCTS_PER_PAGE);
 
   const filteredOrders = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return orders
       .filter((order) => filter === 'All' || order.status === filter)
+      .filter((order) => !orderDateFilter || order.date_order_created === orderDateFilter)
       .filter((order) => {
         if (!needle) return true;
         return [order.order_number, order.customer_name, order.customer_phone, order.pickup_agreement]
@@ -99,7 +122,17 @@ export default function App() {
           .toLowerCase()
           .includes(needle);
       });
-  }, [orders, filter, search]);
+  }, [orders, filter, orderDateFilter, search]);
+
+  const dailyTotals = useMemo(() => {
+    const scopedOrders = orderDateFilter ? orders.filter((order) => order.date_order_created === orderDateFilter) : filteredOrders;
+    const pending = scopedOrders.filter((order) => order.status === 'Pending').length;
+    const done = scopedOrders.filter((order) => order.status === 'Done').length;
+    const paidSales = scopedOrders.filter((order) => order.status === 'Done').reduce((sum, order) => sum + Number(order.total_price), 0);
+    const transactionValue = scopedOrders.reduce((sum, order) => sum + Number(order.total_price), 0);
+    return { orders: scopedOrders.length, pending, done, paidSales, transactionValue };
+  }, [filteredOrders, orderDateFilter, orders]);
+  const visibleOrders = filteredOrders.slice(0, visibleOrderCount);
 
   async function saveProduct(product: ProductForm) {
     const normalized = {
@@ -170,6 +203,11 @@ export default function App() {
   }
 
   async function saveOrder(formOrder: OrderForm) {
+    if (formOrder.items.some((item) => !item.product_id)) {
+      alert('Choose a valid product from the suggestions for every order item.');
+      return;
+    }
+
     const cleanItems = formOrder.items
       .filter((item) => item.product_id && Number(item.quantity) > 0)
       .map((item) => ({ product_id: item.product_id, quantity: Number(item.quantity) }));
@@ -253,32 +291,21 @@ export default function App() {
       <main>
         <aside className="panel side">
           <div className="panel-head">
-            <h2>Dashboard</h2>
+            <h2>Products</h2>
             <button className="btn ghost" disabled={busy} onClick={loadData}>Refresh</button>
           </div>
           <div className="panel-body">
             {error && <div className="notice error">{error}</div>}
-            <div className="stats">
-              <Stat label="Pending" value={totals.pending} />
-              <Stat label="Done" value={totals.done} />
-              <Stat label="Paid revenue" value={money(totals.revenue)} />
-              <Stat label="Low stock" value={totals.lowStock} />
-            </div>
-            <div className="filters">
-              <div className="field">
-                <label>Search orders</label>
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Order no, customer, phone" />
-              </div>
-              <div className="field">
-                <label>Status filter</label>
-                <select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
-                  {['All', 'Pending', 'Done'].map((option) => <option key={option}>{option}</option>)}
-                </select>
-              </div>
-            </div>
             <ProductList
-              products={products}
+              products={paginatedProducts}
+              totalProducts={products.length}
+              filteredProductCount={filteredProducts.length}
               busy={busy}
+              search={productSearch}
+              page={currentProductPage}
+              pageCount={productPageCount}
+              onSearch={setProductSearch}
+              onPageChange={setProductPage}
               onEdit={(product) => setProductModal(productToForm(product))}
               onDelete={deleteProduct}
             />
@@ -290,11 +317,47 @@ export default function App() {
             <h2>Orders</h2>
             <span className="subtle">{filteredOrders.length} shown</span>
           </div>
+          <div className="panel-body">
+            <div className="order-controls">
+              <div className="segmented" aria-label="Order status filter">
+                {(['All', 'Pending', 'Done'] as const).map((option) => (
+                  <button
+                    key={option}
+                    className={filter === option ? 'active' : ''}
+                    onClick={() => setFilter(option)}
+                    type="button"
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+              <div className="field order-search">
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find by Order no, customer, phone" />
+              </div>
+              <div className="date-filter">
+                <div className="field">
+                  <input type="date" value={orderDateFilter} onChange={(event) => setOrderDateFilter(event.target.value)} />
+                </div>
+                <button className="btn" type="button" disabled={!orderDateFilter} onClick={() => setOrderDateFilter('')}>Clear</button>
+              </div>
+            </div>
+            <div className="stats daily-stats">
+              <Stat label={orderDateFilter ? 'Daily orders' : 'Shown orders'} value={dailyTotals.orders} />
+              <Stat label="Pending" value={dailyTotals.pending} />
+              <Stat label="Done" value={dailyTotals.done} />
+              <Stat label="Paid sales" value={money(dailyTotals.paidSales)} />
+            </div>
+            {orderDateFilter && (
+              <div className="notice compact-notice">
+                Total transaction value for {orderDateFilter}: {money(dailyTotals.transactionValue)}
+              </div>
+            )}
+          </div>
           <div className="panel-body order-list">
             {products.length === 0 && <div className="notice">Add at least one product before creating an order.</div>}
             {filteredOrders.length === 0
               ? <div className="empty">No orders yet.</div>
-              : filteredOrders.map((order) => (
+              : visibleOrders.map((order) => (
                 <OrderCard
                   key={order.id}
                   order={order}
@@ -302,6 +365,15 @@ export default function App() {
                   onDelete={() => deleteOrder(order)}
                 />
               ))}
+            {visibleOrders.length < filteredOrders.length && (
+              <button
+                className="btn load-more"
+                type="button"
+                onClick={() => setVisibleOrderCount((count) => count + ORDERS_PER_LOAD)}
+              >
+                Load More Orders
+              </button>
+            )}
           </div>
         </section>
       </main>
@@ -315,7 +387,7 @@ export default function App() {
           onImport={bulkInsertProducts}
         />
       )}
-      {orderModal && <OrderModal order={orderModal} products={products} busy={busy} onClose={() => setOrderModal(null)} onSave={saveOrder} />}
+      {orderModal && <OrderModal order={orderModal} products={sortedProducts} busy={busy} onClose={() => setOrderModal(null)} onSave={saveOrder} />}
     </div>
   );
 }
@@ -380,7 +452,11 @@ function orderToForm(order: Order): OrderForm {
     customer_name: order.customer_name || '',
     customer_address: order.customer_address || '',
     customer_phone: order.customer_phone || '',
-    items: order.order_items.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
+    items: order.order_items.map((item) => ({
+      product_id: item.product_id,
+      product_query: `${item.sku} - ${item.item_name} - ${item.variation || 'No variation'}`,
+      quantity: item.quantity,
+    })),
   };
 }
 
@@ -395,20 +471,37 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 
 function ProductList({
   products,
+  totalProducts,
+  filteredProductCount,
   busy,
+  search,
+  page,
+  pageCount,
+  onSearch,
+  onPageChange,
   onEdit,
   onDelete,
 }: {
   products: Product[];
+  totalProducts: number;
+  filteredProductCount: number;
   busy: boolean;
+  search: string;
+  page: number;
+  pageCount: number;
+  onSearch: (value: string) => void;
+  onPageChange: (value: number) => void;
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
 }) {
   return (
     <div className="products">
-      <div className="panel-head compact-head">
-        <h3>Products</h3>
-        <span className="subtle">{products.length} total</span>
+      <div className="field">
+        <div className="field-header">
+          <label>Search products</label>
+          <span className="subtle">{filteredProductCount} of {totalProducts}</span>
+        </div>
+        <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Product name or SKU" />
       </div>
       {products.length === 0 ? (
         <div className="empty">No products.</div>
@@ -428,6 +521,13 @@ function ProductList({
             </div>
           </div>
         ))
+      )}
+      {filteredProductCount > PRODUCTS_PER_PAGE && (
+        <div className="pager">
+          <button className="btn small-btn" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
+          <span>Page {page} of {pageCount}</span>
+          <button className="btn small-btn" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>Next</button>
+        </div>
       )}
     </div>
   );
@@ -627,8 +727,78 @@ function BulkProductModal({
   );
 }
 
+function ProductAutocomplete({
+  item,
+  rowIndex,
+  products,
+  selectedProductIds,
+  isFocused,
+  onFocus,
+  onBlur,
+  onQueryChange,
+  onSelect,
+}: {
+  item: OrderFormItem;
+  rowIndex: number;
+  products: Product[];
+  selectedProductIds: string[];
+  isFocused: boolean;
+  onFocus: () => void;
+  onBlur: () => void;
+  onQueryChange: (value: string) => void;
+  onSelect: (product: Product) => void;
+}) {
+  const needle = item.product_query.trim().toLowerCase();
+  const suggestions = products
+    .filter((product) => {
+      if (product.id === item.product_id) return true;
+      if (selectedProductIds.includes(product.id)) return false;
+      if (!needle) return true;
+      return [product.name, product.sku].join(' ').toLowerCase().includes(needle);
+    });
+
+  return (
+    <div className="field autocomplete-field">
+      <label>Product</label>
+      <input
+        value={item.product_query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onFocus={onFocus}
+        onClick={onFocus}
+        onBlur={onBlur}
+        placeholder="Choose product by name or SKU"
+        required
+        aria-autocomplete="list"
+        aria-expanded={isFocused}
+        aria-controls={`product-suggestions-${rowIndex}`}
+      />
+      {isFocused && (
+        <div className="suggestions" id={`product-suggestions-${rowIndex}`}>
+          {suggestions.length === 0 ? (
+            <div className="suggestion empty-suggestion">No matching products</div>
+          ) : (
+            suggestions.map((product) => (
+              <button
+                type="button"
+                className="suggestion"
+                key={product.id}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onSelect(product)}
+              >
+                <strong>{product.sku} - {product.name}</strong>
+                <span>{product.variation || 'No variation'} | {product.stock} stock | {money(product.price)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderForm; products: Product[]; busy: boolean; onSave: (order: OrderForm) => void; onClose: () => void }) {
   const [form, setForm] = useState(order);
+  const [focusedProductRow, setFocusedProductRow] = useState<number | null>(null);
   const update = (key: keyof OrderForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
   const updateItem = (index: number, key: keyof OrderFormItem, value: string) => {
     setForm((current) => ({
@@ -636,12 +806,30 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
       items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
     }));
   };
+  const updateProductQuery = (index: number, value: string) => {
+    setFocusedProductRow(index);
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, product_id: '', product_query: value } : item),
+    }));
+  };
+  const selectProduct = (index: number, product: Product) => {
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) => itemIndex === index ? { ...item, product_id: product.id, product_query: productOptionLabel(product) } : item),
+    }));
+    setFocusedProductRow(null);
+  };
   const selectedTotal = form.items.reduce((sum, item) => {
     const product = products.find((entry) => entry.id === item.product_id);
     return sum + (Number(product?.price || 0) * Number(item.quantity || 0));
   }, 0);
   const selectedProductIds = form.items.map((item) => item.product_id).filter(Boolean);
   const canAddItem = selectedProductIds.length < products.length;
+  const sortedProducts = useMemo(
+    () => [...products].sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: 'base' })),
+    [products],
+  );
 
   return (
     <div className="modal-backdrop">
@@ -655,17 +843,17 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
             <h3>Order Items *</h3>
             {form.items.map((item, index) => (
               <div className="item-row" key={index}>
-                <div className="field">
-                  <label>Product</label>
-                  <select value={item.product_id} required onChange={(event) => updateItem(index, 'product_id', event.target.value)}>
-                    <option value="">Choose product</option>
-                    {products
-                      .filter((product) => product.id === item.product_id || !selectedProductIds.includes(product.id))
-                      .map((product) => (
-                      <option key={product.id} value={product.id}>{product.name} - {product.variation} - ({product.stock} stock) - {money(product.price)}</option>
-                    ))}
-                  </select>
-                </div>
+                <ProductAutocomplete
+                  item={item}
+                  rowIndex={index}
+                  products={sortedProducts}
+                  selectedProductIds={selectedProductIds}
+                  isFocused={focusedProductRow === index}
+                  onFocus={() => setFocusedProductRow(index)}
+                  onBlur={() => window.setTimeout(() => setFocusedProductRow((current) => current === index ? null : current), 120)}
+                  onQueryChange={(value) => updateProductQuery(index, value)}
+                  onSelect={(product) => selectProduct(index, product)}
+                />
                 <Field label="Qty" type="number" min="1" value={item.quantity} onChange={(value) => updateItem(index, 'quantity', value)} required />
                 <div className="field">
                   <label>Line total</label>
@@ -685,7 +873,7 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
               type="button"
               className="btn"
               disabled={!canAddItem}
-              onClick={() => setForm((current) => ({ ...current, items: [...current.items, { product_id: '', quantity: 1 }] }))}
+              onClick={() => setForm((current) => ({ ...current, items: [...current.items, { product_id: '', product_query: '', quantity: 1 }] }))}
             >
               + Add Item
             </button>
