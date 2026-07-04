@@ -29,6 +29,158 @@ const emptyOrder: OrderForm = {
 };
 
 export default function App() {
+  return window.location.pathname.toLowerCase() === '/stocktrack' ? <StockTrackPage /> : <AdminApp />;
+}
+
+function StockTrackPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [query, setQuery] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    async function loadPublicProducts() {
+      setLoading(true);
+      setError('');
+      const { data, error: productsError } = await supabase
+        .from('products')
+        .select('id, name, sku, size, variation, price, stock')
+        .order('sku', { ascending: true });
+
+      if (productsError) {
+        setError(productsError.message);
+        setProducts([]);
+      } else {
+        setProducts((data || []) as Product[]);
+      }
+
+      setLoading(false);
+    }
+
+    void loadPublicProducts();
+  }, []);
+
+  const sortedProducts = useMemo(
+    () => [...products].sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: 'base' })),
+    [products],
+  );
+  const needle = query.trim().toLowerCase();
+  const suggestions = sortedProducts.filter((product) => {
+    if (!needle) return true;
+    return [product.name, product.sku, product.size, product.variation].join(' ').toLowerCase().includes(needle);
+  });
+  const visibleProducts = selectedProductId
+    ? sortedProducts.filter((product) => product.id === selectedProductId)
+    : suggestions;
+
+  function chooseProduct(product: Product) {
+    setSelectedProductId(product.id);
+    setQuery(`${product.sku} - ${product.name}`);
+    setFocused(false);
+  }
+
+  function updateQuery(value: string) {
+    setQuery(value);
+    setSelectedProductId('');
+    setFocused(true);
+  }
+
+  return (
+    <div className="stock-page">
+      <header className="stock-hero">
+        <div>
+          <h1>HomPimPah Stock Track</h1>
+          <p>Check live merch stock and prices before ordering.</p>
+        </div>
+      </header>
+
+      <main className="stock-main">
+        <section className="stock-search-panel">
+          <div className="field autocomplete-field public-search">
+            <label>Search stock</label>
+            <input
+              value={query}
+              onChange={(event) => updateQuery(event.target.value)}
+              onFocus={() => setFocused(true)}
+              onClick={() => setFocused(true)}
+              onBlur={() => window.setTimeout(() => setFocused(false), 120)}
+              placeholder="Search product name or SKU"
+              aria-autocomplete="list"
+              aria-expanded={focused}
+              aria-controls="stock-suggestions"
+            />
+            {focused && (
+              <div className="suggestions stock-suggestions" id="stock-suggestions">
+                {suggestions.length === 0 ? (
+                  <div className="suggestion empty-suggestion">No matching products</div>
+                ) : (
+                  suggestions.map((product) => (
+                    <button
+                      type="button"
+                      className="suggestion"
+                      key={product.id}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => chooseProduct(product)}
+                    >
+                      <strong>{product.sku} - {product.name}</strong>
+                      <span>{product.size || 'No size'} | {product.variation || 'No variation'} | {money(product.price)}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          {query && (
+            <button className="btn" type="button" onClick={() => { setQuery(''); setSelectedProductId(''); }}>
+              Clear
+            </button>
+          )}
+        </section>
+
+        {loading && <div className="panel public-message">Loading stock...</div>}
+        {error && <div className="notice error public-error">{error}</div>}
+        {!loading && !error && (
+          <section className="stock-grid">
+            {visibleProducts.length === 0 ? (
+              <div className="panel public-message">No products found.</div>
+            ) : (
+              visibleProducts.map((product) => <StockProductCard key={product.id} product={product} />)
+            )}
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function stockState(stock: number) {
+  if (stock <= 0) return { label: 'Out of stock', className: 'out' };
+  if (stock <= 5) return { label: 'Low stock', className: 'low' };
+  return { label: 'Available', className: 'available' };
+}
+
+function StockProductCard({ product }: { product: Product }) {
+  const state = stockState(Number(product.stock));
+
+  return (
+    <article className="stock-card">
+      <div>
+        <span className="stock-sku">{product.sku}</span>
+        <h2>{product.name}</h2>
+        <p>{product.size || 'No size'} | {product.variation || 'No variation'}</p>
+      </div>
+      <div className="stock-card-foot">
+        <strong>{money(product.price)}</strong>
+        <span className={`stock-pill ${state.className}`}>{state.label}</span>
+      </div>
+      <div className="stock-count">{Number(product.stock)} in stock</div>
+    </article>
+  );
+}
+
+function AdminApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);

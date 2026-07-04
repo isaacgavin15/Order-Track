@@ -355,6 +355,12 @@ on products for select
 to authenticated
 using (true);
 
+drop policy if exists "Public can read product stock and prices" on products;
+create policy "Public can read product stock and prices"
+on products for select
+to anon
+using (true);
+
 drop policy if exists "Authenticated users can manage products" on products;
 create policy "Authenticated users can manage products"
 on products for all
@@ -377,3 +383,4 @@ using (true);
 grant execute on function create_order(text, text, date, text, text, text, jsonb) to authenticated;
 grant execute on function update_pending_order(uuid, text, text, date, text, text, text, jsonb) to authenticated;
 grant execute on function delete_pending_order(uuid) to authenticated;
+grant select on products to anon;

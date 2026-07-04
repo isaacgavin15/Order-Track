@@ -24,10 +24,19 @@ npm run dev
 
 The app reads Supabase settings from `.env`.
 
+Public stock tracking page:
+
+```text
+/StockTrack
+```
+
+This page does not require login and is intended for direct customer access.
+
 ## Supabase Integration
 
 - `src/utils/supabase.ts` creates the Supabase client.
 - `src/App.tsx` loads products and orders from Supabase.
+- `/StockTrack` publicly loads product name, SKU, size, variation, price, and stock from Supabase.
 - Products are inserted and updated through the `products` table.
 - Products can be bulk imported from one or more Excel workbooks. Every sheet must use the `productList.xlsx` headers:
   `Product Name*`, `SKU*`, `Size`, `Variation`, `Price*`, `Stock*`.
@@ -40,6 +49,10 @@ The app reads Supabase settings from `.env`.
 ## QA checklist
 
 - Sign in with a Supabase Auth user.
+- Confirm `/StockTrack` opens without login.
+- Confirm `/StockTrack` shows product prices and stock status.
+- Confirm `/StockTrack` autocomplete works by product name and SKU.
+- Confirm `/StockTrack` is responsive on mobile and desktop.
 - Add product with mandatory product name, price, stock, and SKU.
 - Reject product with missing mandatory fields or duplicate SKU.
 - Delete an unused product.
