@@ -1,6 +1,6 @@
 export type OrderStatus = 'Pending' | 'Done';
 
-export type PickupAgreement = 'Self pick up at biggledot' | 'Online delivery' | 'Expedition';
+export type PickupAgreement = 'Self pick up' | 'Online delivery' | 'Expedition';
 
 export type Product = {
   id: string;

@@ -18,18 +18,37 @@ create table if not exists orders (
   status text not null check (status in ('Pending', 'Done')),
   pickup_agreement text not null check (
     pickup_agreement in (
-      'Self pick up at biggledot',
+      'Self pick up',
       'Online delivery',
       'Expedition'
     )
   ),
   total_price numeric(12, 2) not null default 0 check (total_price >= 0),
-  date_order_created date not null default current_date,
+  date_order_created date not null default ((now() at time zone 'Asia/Jakarta')::date),
   customer_name text,
   customer_address text,
   customer_phone text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+alter table orders
+alter column date_order_created set default ((now() at time zone 'Asia/Jakarta')::date);
+
+alter table orders drop constraint if exists orders_pickup_agreement_check;
+
+update orders
+set pickup_agreement = 'Self pick up'
+where pickup_agreement = 'Self pick up at biggledot';
+
+alter table orders
+add constraint orders_pickup_agreement_check
+check (
+  pickup_agreement in (
+    'Self pick up',
+    'Online delivery',
+    'Expedition'
+  )
 );
 
 create table if not exists order_items (
@@ -77,7 +96,7 @@ execute function set_updated_at();
 create or replace function generate_order_number()
 returns text as $$
 begin
-  return 'HP-' || to_char(now(), 'YYYYMMDD') || '-' || lpad(nextval('order_number_seq')::text, 4, '0');
+  return 'HP-' || to_char(now() at time zone 'Asia/Jakarta', 'YYYYMMDD') || '-' || lpad(nextval('order_number_seq')::text, 4, '0');
 end;
 $$ language plpgsql;
 

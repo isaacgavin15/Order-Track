@@ -8,7 +8,7 @@ the user want to be able to track this parameter :
 - *Order status :
     1. Pending : recent incoming order and is unpaid
     2. Done : Order that have been paid & (picked up / sent)
-- *pick up agreement : self pick up at biggledot / online delivery / expedition
+- *pick up agreement : self pick up / online delivery / expedition
 - *date order created
 - customer info (Name, address, phone no)
 
@@ -27,9 +27,3 @@ Notes :
 - brown/light brown based theme
 - do multiple QA test ensuring every feature works correctly
 - build with react js
-
-=======================================================================
-
-Revision 1
-- Supabase Integration
-- Project reconstruction into vite react project

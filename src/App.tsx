@@ -4,12 +4,39 @@ import { supabase } from './utils/supabase';
 import { parseProductExcelFiles, productImportRowsToInserts, validateProductImportRows } from './utils/productImport';
 import type { Order, OrderForm, OrderFormItem, PickupAgreement, Product, ProductForm, ProductImportRow, ProductInsert } from './types';
 
-const DELIVERY_TYPES: PickupAgreement[] = ['Self pick up at biggledot', 'Online delivery', 'Expedition'];
+const DELIVERY_TYPES: PickupAgreement[] = ['Self pick up', 'Online delivery', 'Expedition'];
 const PRODUCTS_PER_PAGE = 10;
 const ORDERS_PER_LOAD = 10;
-const today = () => new Date().toISOString().slice(0, 10);
+const INDONESIA_LOCALE = 'id-ID';
+const INDONESIA_TIME_ZONE = 'Asia/Jakarta';
+const dateInputFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: INDONESIA_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const displayDateFormatter = new Intl.DateTimeFormat(INDONESIA_LOCALE, {
+  timeZone: INDONESIA_TIME_ZONE,
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
+});
+const today = () => {
+  const parts = dateInputFormatter.formatToParts(new Date());
+  const getPart = (type: string) => parts.find((part) => part.type === type)?.value || '';
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+};
+const displayDate = (value: string | null | undefined) => {
+  if (!value) return '-';
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return value;
+  return displayDateFormatter.format(new Date(Date.UTC(year, month - 1, day, 12)));
+};
+const normalizePickupAgreement = (value: string | null | undefined): PickupAgreement =>
+  value === 'Self pick up at biggledot' ? 'Self pick up' : (value as PickupAgreement);
+const displayPickupAgreement = (value: string | null | undefined) => normalizePickupAgreement(value || 'Self pick up');
 const money = (value: number | string | null | undefined) =>
-  new Intl.NumberFormat('id-ID', {
+  new Intl.NumberFormat(INDONESIA_LOCALE, {
     style: 'currency',
     currency: 'IDR',
     maximumFractionDigits: 0,
@@ -269,7 +296,7 @@ function AdminApp() {
       .filter((order) => !orderDateFilter || order.date_order_created === orderDateFilter)
       .filter((order) => {
         if (!needle) return true;
-        return [order.order_number, order.customer_name, order.customer_phone, order.pickup_agreement]
+        return [order.order_number, order.customer_name, order.customer_phone, displayPickupAgreement(order.pickup_agreement)]
           .join(' ')
           .toLowerCase()
           .includes(needle);
@@ -501,7 +528,7 @@ function AdminApp() {
             </div>
             {orderDateFilter && (
               <div className="notice compact-notice">
-                Total transaction value for {orderDateFilter}: {money(dailyTotals.transactionValue)}
+                Total transaction value for {displayDate(orderDateFilter)}: {money(dailyTotals.transactionValue)}
               </div>
             )}
           </div>
@@ -599,7 +626,7 @@ function orderToForm(order: Order): OrderForm {
     id: order.id,
     order_number: order.order_number,
     status: order.status,
-    pickup_agreement: order.pickup_agreement,
+    pickup_agreement: normalizePickupAgreement(order.pickup_agreement),
     date_order_created: order.date_order_created,
     customer_name: order.customer_name || '',
     customer_address: order.customer_address || '',
@@ -697,8 +724,8 @@ function OrderCard({ order, onEdit, onDelete }: { order: Order; onEdit: () => vo
       </div>
       <div className="meta">
         <Meta label="Total" value={money(order.total_price)} />
-        <Meta label="Created" value={order.date_order_created} />
-        <Meta label="Agreement" value={order.pickup_agreement} />
+        <Meta label="Created" value={displayDate(order.date_order_created)} />
+        <Meta label="Agreement" value={displayPickupAgreement(order.pickup_agreement)} />
         <Meta label="Address" value={order.customer_address || '-'} />
       </div>
       <ul className="items">
