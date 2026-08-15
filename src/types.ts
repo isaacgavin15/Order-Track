@@ -1,6 +1,17 @@
 export type OrderStatus = 'Pending' | 'Done';
 
 export type PickupAgreement = 'Self pick up' | 'Online delivery' | 'Expedition';
+export type ProductSegment = 'Kudapan Club' | 'Chonky Club' | 'Bocah Hompimpah Club';
+
+export type Market = {
+  id: string;
+  market_id: string;
+  name: string;
+  start_date: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
 
 export type Product = {
   id: string;
@@ -10,6 +21,7 @@ export type Product = {
   variation: string | null;
   stock: number;
   sku: string;
+  product_segment: ProductSegment;
   created_at?: string;
   updated_at?: string;
 };
@@ -32,6 +44,8 @@ export type Order = {
   order_number: string;
   status: OrderStatus;
   pickup_agreement: PickupAgreement;
+  market_id: string;
+  markets?: Market | null;
   total_price: number;
   date_order_created: string;
   customer_name: string | null;
@@ -50,6 +64,7 @@ export type ProductForm = {
   variation: string;
   stock: string | number;
   sku: string;
+  product_segment: ProductSegment;
 };
 
 export type OrderFormItem = {
@@ -63,6 +78,7 @@ export type OrderForm = {
   order_number?: string;
   status: OrderStatus;
   pickup_agreement: PickupAgreement;
+  market_id: string;
   date_order_created: string;
   customer_name: string;
   customer_address: string;
@@ -90,4 +106,12 @@ export type ProductInsert = {
   variation: string | null;
   price: number;
   stock: number;
+};
+
+export type MarketForm = {
+  id?: string;
+  market_id: string;
+  name: string;
+  start_date: string;
+  is_active: boolean;
 };

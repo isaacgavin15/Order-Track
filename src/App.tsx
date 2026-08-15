@@ -2,9 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './utils/supabase';
 import { parseProductExcelFiles, productImportRowsToInserts, validateProductImportRows } from './utils/productImport';
-import type { Order, OrderForm, OrderFormItem, PickupAgreement, Product, ProductForm, ProductImportRow, ProductInsert } from './types';
+import type { Market, MarketForm, Order, OrderForm, OrderFormItem, PickupAgreement, Product, ProductForm, ProductImportRow, ProductInsert, ProductSegment } from './types';
 
 const DELIVERY_TYPES: PickupAgreement[] = ['Self pick up', 'Online delivery', 'Expedition'];
+const PRODUCT_SEGMENTS: ProductSegment[] = ['Kudapan Club', 'Chonky Club', 'Bocah Hompimpah Club'];
+const PRODUCT_SEGMENT_PREFIX: Record<ProductSegment, string> = {
+  'Kudapan Club': 'KC',
+  'Chonky Club': 'CC',
+  'Bocah Hompimpah Club': 'BCH',
+};
 const PRODUCTS_PER_PAGE = 10;
 const ORDERS_PER_LOAD = 10;
 const INDONESIA_LOCALE = 'id-ID';
@@ -43,17 +49,34 @@ const money = (value: number | string | null | undefined) =>
   }).format(Number(value) || 0);
 const productOptionLabel = (product: Product) =>
   `${product.sku} - ${product.name} - ${product.variation || 'No variation'} - (${product.stock} stock) - ${money(product.price)}`;
+const getProductSegmentFromSku = (sku: string): ProductSegment => {
+  const normalized = sku.toUpperCase();
+  if (normalized.startsWith('BCH')) return 'Bocah Hompimpah Club';
+  if (normalized.startsWith('CC')) return 'Chonky Club';
+  return 'Kudapan Club';
+};
+const getNextSku = (segment: ProductSegment, products: Product[]) => {
+  const prefix = PRODUCT_SEGMENT_PREFIX[segment];
+  const pattern = new RegExp(`^${prefix}(\\d+)$`, 'i');
+  const maxNumber = products.reduce((max, product) => {
+    const match = product.sku.match(pattern);
+    return match ? Math.max(max, Number(match[1]) || 0) : max;
+  }, 0);
+  return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`;
+};
 
-const emptyProduct: ProductForm = { name: '', size: '', price: '', variation: '', stock: '', sku: '' };
-const emptyOrder: OrderForm = {
+const emptyProduct: ProductForm = { name: '', size: '', price: '', variation: '', stock: '', sku: '', product_segment: 'Kudapan Club' };
+const createEmptyOrder = (marketId = ''): OrderForm => ({
   status: 'Pending',
   pickup_agreement: DELIVERY_TYPES[0],
+  market_id: marketId,
   date_order_created: today(),
   customer_name: '',
   customer_address: '',
   customer_phone: '',
   items: [{ product_id: '', product_query: '', quantity: 1 }],
-};
+});
+const emptyMarket: MarketForm = { market_id: '', name: '', start_date: today(), is_active: true };
 
 export default function App() {
   return window.location.pathname.toLowerCase() === '/stocktrack' ? <StockTrackPage /> : <AdminApp />;
@@ -73,7 +96,7 @@ function StockTrackPage() {
       setError('');
       const { data, error: productsError } = await supabase
         .from('products')
-        .select('id, name, sku, size, variation, price, stock')
+        .select('id, name, sku, size, variation, price, stock, product_segment')
         .order('sku', { ascending: true });
 
       if (productsError) {
@@ -211,15 +234,20 @@ function AdminApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [markets, setMarkets] = useState<Market[]>([]);
   const [filter, setFilter] = useState<'All' | 'Pending' | 'Done'>('All');
   const [search, setSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [productPage, setProductPage] = useState(1);
-  const [orderDateFilter, setOrderDateFilter] = useState('');
+  const [orderDateFilter, setOrderDateFilter] = useState(today());
+  const [marketFilter, setMarketFilter] = useState('');
+  const [rangeStartFilter, setRangeStartFilter] = useState('');
+  const [rangeEndFilter, setRangeEndFilter] = useState('');
   const [visibleOrderCount, setVisibleOrderCount] = useState(ORDERS_PER_LOAD);
   const [orderModal, setOrderModal] = useState<OrderForm | null>(null);
   const [productModal, setProductModal] = useState<ProductForm | null>(null);
   const [bulkProductModal, setBulkProductModal] = useState(false);
+  const [marketModal, setMarketModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -241,6 +269,7 @@ function AdminApp() {
     if (!session) {
       setProducts([]);
       setOrders([]);
+      setMarkets([]);
       return;
     }
 
@@ -253,24 +282,26 @@ function AdminApp() {
 
   useEffect(() => {
     setVisibleOrderCount(ORDERS_PER_LOAD);
-  }, [filter, orderDateFilter, search]);
+  }, [filter, orderDateFilter, marketFilter, rangeStartFilter, rangeEndFilter, search]);
 
   async function loadData() {
     setError('');
-    const [productsResult, ordersResult] = await Promise.all([
+    const [marketsResult, productsResult, ordersResult] = await Promise.all([
+      supabase.from('markets').select('*').order('start_date', { ascending: false }),
       supabase.from('products').select('*').order('created_at', { ascending: false }),
       supabase
         .from('orders')
-        .select('*, order_items(*)')
+        .select('*, markets(*), order_items(*)')
         .order('date_order_created', { ascending: false })
         .order('created_at', { ascending: false }),
     ]);
 
-    if (productsResult.error || ordersResult.error) {
-      setError(productsResult.error?.message || ordersResult.error?.message || 'Failed to load data.');
+    if (marketsResult.error || productsResult.error || ordersResult.error) {
+      setError(marketsResult.error?.message || productsResult.error?.message || ordersResult.error?.message || 'Failed to load data.');
       return;
     }
 
+    setMarkets((marketsResult.data || []) as Market[]);
     setProducts((productsResult.data || []) as Product[]);
     setOrders((ordersResult.data || []) as Order[]);
   }
@@ -288,29 +319,39 @@ function AdminApp() {
   const productPageCount = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
   const currentProductPage = Math.min(productPage, productPageCount);
   const paginatedProducts = filteredProducts.slice((currentProductPage - 1) * PRODUCTS_PER_PAGE, currentProductPage * PRODUCTS_PER_PAGE);
+  const activeMarkets = useMemo(() => markets.filter((market) => market.is_active), [markets]);
+  const defaultMarketId = activeMarkets[0]?.id || markets[0]?.id || '';
+  const hasRangeFilter = Boolean(rangeStartFilter || rangeEndFilter);
 
   const filteredOrders = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return orders
       .filter((order) => filter === 'All' || order.status === filter)
-      .filter((order) => !orderDateFilter || order.date_order_created === orderDateFilter)
+      .filter((order) => !marketFilter || order.market_id === marketFilter)
+      .filter((order) => {
+        if (hasRangeFilter) {
+          if (rangeStartFilter && order.date_order_created < rangeStartFilter) return false;
+          if (rangeEndFilter && order.date_order_created > rangeEndFilter) return false;
+          return true;
+        }
+        return !orderDateFilter || order.date_order_created === orderDateFilter;
+      })
       .filter((order) => {
         if (!needle) return true;
-        return [order.order_number, order.customer_name, order.customer_phone, displayPickupAgreement(order.pickup_agreement)]
+        return [order.order_number, order.customer_name, order.customer_phone, order.markets?.name, displayPickupAgreement(order.pickup_agreement)]
           .join(' ')
           .toLowerCase()
           .includes(needle);
       });
-  }, [orders, filter, orderDateFilter, search]);
+  }, [orders, filter, marketFilter, hasRangeFilter, rangeStartFilter, rangeEndFilter, orderDateFilter, search]);
 
   const dailyTotals = useMemo(() => {
-    const scopedOrders = orderDateFilter ? orders.filter((order) => order.date_order_created === orderDateFilter) : filteredOrders;
-    const pending = scopedOrders.filter((order) => order.status === 'Pending').length;
-    const done = scopedOrders.filter((order) => order.status === 'Done').length;
-    const paidSales = scopedOrders.filter((order) => order.status === 'Done').reduce((sum, order) => sum + Number(order.total_price), 0);
-    const transactionValue = scopedOrders.reduce((sum, order) => sum + Number(order.total_price), 0);
-    return { orders: scopedOrders.length, pending, done, paidSales, transactionValue };
-  }, [filteredOrders, orderDateFilter, orders]);
+    const pending = filteredOrders.filter((order) => order.status === 'Pending').length;
+    const done = filteredOrders.filter((order) => order.status === 'Done').length;
+    const paidSales = filteredOrders.filter((order) => order.status === 'Done').reduce((sum, order) => sum + Number(order.total_price), 0);
+    const transactionValue = filteredOrders.reduce((sum, order) => sum + Number(order.total_price), 0);
+    return { orders: filteredOrders.length, pending, done, paidSales, transactionValue };
+  }, [filteredOrders]);
   const visibleOrders = filteredOrders.slice(0, visibleOrderCount);
 
   async function saveProduct(product: ProductForm) {
@@ -321,10 +362,11 @@ function AdminApp() {
       price: Number(product.price),
       stock: Number(product.stock),
       sku: product.sku.trim().toUpperCase(),
+      product_segment: product.product_segment,
     };
 
-    if (!normalized.name || !normalized.sku || !Number.isFinite(normalized.price) || normalized.price < 0 || !Number.isFinite(normalized.stock) || normalized.stock < 0) {
-      alert('Product name, price, stock, and SKU are mandatory. Price and stock must be valid numbers.');
+    if (!normalized.name || !normalized.product_segment || !Number.isFinite(normalized.price) || normalized.price < 0 || !Number.isFinite(normalized.stock) || normalized.stock < 0) {
+      alert('Product name, product segment, price, and stock are mandatory. Price and stock must be valid numbers.');
       return;
     }
 
@@ -332,7 +374,14 @@ function AdminApp() {
     setError('');
     const result = product.id
       ? await supabase.from('products').update(normalized).eq('id', product.id)
-      : await supabase.from('products').insert(normalized);
+      : await supabase.rpc('create_product', {
+        p_name: normalized.name,
+        p_size: normalized.size || '',
+        p_price: normalized.price,
+        p_variation: normalized.variation || '',
+        p_stock: normalized.stock,
+        p_product_segment: normalized.product_segment,
+      });
 
     setBusy(false);
     if (result.error) {
@@ -391,8 +440,8 @@ function AdminApp() {
       .filter((item) => item.product_id && Number(item.quantity) > 0)
       .map((item) => ({ product_id: item.product_id, quantity: Number(item.quantity) }));
 
-    if (!cleanItems.length || !formOrder.pickup_agreement || !formOrder.date_order_created) {
-      alert('Order items, pickup agreement, and date order created are mandatory.');
+    if (!cleanItems.length || !formOrder.pickup_agreement || !formOrder.market_id || !formOrder.date_order_created) {
+      alert('Order items, market, pickup agreement, and date order created are mandatory.');
       return;
     }
 
@@ -407,6 +456,7 @@ function AdminApp() {
       ...(formOrder.id ? { p_order_id: formOrder.id } : {}),
       p_status: formOrder.status,
       p_pickup_agreement: formOrder.pickup_agreement,
+      p_market_id: formOrder.market_id,
       p_date_order_created: formOrder.date_order_created,
       p_customer_name: formOrder.customer_name,
       p_customer_address: formOrder.customer_address,
@@ -444,6 +494,69 @@ function AdminApp() {
     await loadData();
   }
 
+  async function saveMarket(market: MarketForm) {
+    const normalized = {
+      market_id: market.market_id.trim().toUpperCase().replace(/\s+/g, '-'),
+      name: market.name.trim(),
+      start_date: market.start_date,
+      is_active: market.is_active,
+    };
+
+    if (!normalized.market_id || !normalized.name || !normalized.start_date) {
+      alert('Market ID, market name, and start date are mandatory.');
+      return false;
+    }
+
+    setBusy(true);
+    setError('');
+    const result = market.id
+      ? await supabase.from('markets').update(normalized).eq('id', market.id)
+      : await supabase.from('markets').insert(normalized);
+    setBusy(false);
+
+    if (result.error) {
+      setError(result.error.message);
+      return false;
+    }
+
+    await loadData();
+    return true;
+  }
+
+  async function deleteMarket(market: Market) {
+    const attachedOrders = orders.filter((order) => order.market_id === market.id).length;
+    if (attachedOrders > 0) {
+      if (!confirm(`${market.name} has ${attachedOrders} order(s). Deactivate it instead?`)) return;
+      setBusy(true);
+      setError('');
+      const { error: updateError } = await supabase.from('markets').update({ is_active: false }).eq('id', market.id);
+      setBusy(false);
+
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      await loadData();
+      return;
+    }
+
+    if (!confirm(`Delete market ${market.name}?`)) return;
+
+    setBusy(true);
+    setError('');
+    const { error: deleteError } = await supabase.from('markets').delete().eq('id', market.id);
+    setBusy(false);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    if (marketFilter === market.id) setMarketFilter('');
+    await loadData();
+  }
+
   if (loading) {
     return <div className="center-screen">Loading...</div>;
   }
@@ -460,9 +573,10 @@ function AdminApp() {
           <p>Order and merch stock tracking for fast-paced selling.</p>
         </div>
         <div className="actions">
+          <button className="btn" onClick={() => setMarketModal(true)}>Markets</button>
           <button className="btn" onClick={() => setBulkProductModal(true)}>Bulk Upload</button>
           <button className="btn" onClick={() => setProductModal({ ...emptyProduct })}>+ Product</button>
-          <button className="btn primary" disabled={products.length === 0} onClick={() => setOrderModal({ ...emptyOrder })}>+ Order</button>
+          <button className="btn primary" disabled={products.length === 0 || markets.length === 0} onClick={() => setOrderModal(createEmptyOrder(defaultMarketId))}>+ Order</button>
           <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
         </div>
       </header>
@@ -515,22 +629,48 @@ function AdminApp() {
               </div>
               <div className="date-filter">
                 <div className="field">
+                  <label>Daily sales</label>
                   <input type="date" value={orderDateFilter} onChange={(event) => setOrderDateFilter(event.target.value)} />
                 </div>
-                <button className="btn" type="button" disabled={!orderDateFilter} onClick={() => setOrderDateFilter('')}>Clear</button>
               </div>
             </div>
+            <details className="advanced-filters">
+              <summary>More filters</summary>
+              <div className="advanced-filter-grid">
+                <div className="field">
+                  <label>Market</label>
+                  <select value={marketFilter} onChange={(event) => setMarketFilter(event.target.value)}>
+                    <option value="">All markets</option>
+                    {markets.map((market) => (
+                      <option key={market.id} value={market.id}>{market.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Field label="Start date" type="date" value={rangeStartFilter} onChange={setRangeStartFilter} />
+                <Field label="End date" type="date" value={rangeEndFilter} onChange={setRangeEndFilter} />
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={!marketFilter && !rangeStartFilter && !rangeEndFilter}
+                  onClick={() => {
+                    setMarketFilter('');
+                    setRangeStartFilter('');
+                    setRangeEndFilter('');
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </details>
             <div className="stats daily-stats">
-              <Stat label={orderDateFilter ? 'Daily orders' : 'Shown orders'} value={dailyTotals.orders} />
+              <Stat label={hasRangeFilter ? 'Filtered orders' : 'Daily orders'} value={dailyTotals.orders} />
               <Stat label="Pending" value={dailyTotals.pending} />
               <Stat label="Done" value={dailyTotals.done} />
               <Stat label="Paid sales" value={money(dailyTotals.paidSales)} />
             </div>
-            {orderDateFilter && (
-              <div className="notice compact-notice">
-                Total transaction value for {displayDate(orderDateFilter)}: {money(dailyTotals.transactionValue)}
-              </div>
-            )}
+            <div className="notice compact-notice">
+              Total transaction value for {hasRangeFilter ? 'selected range' : displayDate(orderDateFilter)}: {money(dailyTotals.transactionValue)}
+            </div>
           </div>
           <div className="panel-body order-list">
             {products.length === 0 && <div className="notice">Add at least one product before creating an order.</div>}
@@ -557,7 +697,8 @@ function AdminApp() {
         </section>
       </main>
 
-      {productModal && <ProductModal product={productModal} busy={busy} onClose={() => setProductModal(null)} onSave={saveProduct} />}
+      {marketModal && <MarketModal markets={markets} busy={busy} onClose={() => setMarketModal(false)} onSave={saveMarket} onDelete={deleteMarket} />}
+      {productModal && <ProductModal product={productModal} products={products} busy={busy} onClose={() => setProductModal(null)} onSave={saveProduct} />}
       {bulkProductModal && (
         <BulkProductModal
           busy={busy}
@@ -566,7 +707,7 @@ function AdminApp() {
           onImport={bulkInsertProducts}
         />
       )}
-      {orderModal && <OrderModal order={orderModal} products={sortedProducts} busy={busy} onClose={() => setOrderModal(null)} onSave={saveOrder} />}
+      {orderModal && <OrderModal order={orderModal} products={sortedProducts} markets={markets} busy={busy} onClose={() => setOrderModal(null)} onSave={saveOrder} />}
     </div>
   );
 }
@@ -618,6 +759,7 @@ function productToForm(product: Product): ProductForm {
     variation: product.variation || '',
     stock: product.stock,
     sku: product.sku,
+    product_segment: product.product_segment || getProductSegmentFromSku(product.sku),
   };
 }
 
@@ -627,6 +769,7 @@ function orderToForm(order: Order): OrderForm {
     order_number: order.order_number,
     status: order.status,
     pickup_agreement: normalizePickupAgreement(order.pickup_agreement),
+    market_id: order.market_id,
     date_order_created: order.date_order_created,
     customer_name: order.customer_name || '',
     customer_address: order.customer_address || '',
@@ -689,7 +832,7 @@ function ProductList({
           <div className="product" key={product.id}>
             <div>
               <strong>{product.name}</strong>
-              <small>{product.sku} | {product.size || 'No size'} | {product.variation || 'No variation'} | {money(product.price)}</small>
+              <small>{product.sku} | {product.product_segment || getProductSegmentFromSku(product.sku)} | {product.size || 'No size'} | {product.variation || 'No variation'} | {money(product.price)}</small>
             </div>
             <div className="product-stock">
               <strong>{product.stock}</strong>
@@ -725,6 +868,7 @@ function OrderCard({ order, onEdit, onDelete }: { order: Order; onEdit: () => vo
       <div className="meta">
         <Meta label="Total" value={money(order.total_price)} />
         <Meta label="Created" value={displayDate(order.date_order_created)} />
+        <Meta label="Market" value={order.markets?.name || 'Art Market'} />
         <Meta label="Agreement" value={displayPickupAgreement(order.pickup_agreement)} />
         <Meta label="Address" value={order.customer_address || '-'} />
       </div>
@@ -761,9 +905,98 @@ function Meta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ProductModal({ product, busy, onSave, onClose }: { product: ProductForm; busy: boolean; onSave: (product: ProductForm) => void; onClose: () => void }) {
+function MarketModal({
+  markets,
+  busy,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  markets: Market[];
+  busy: boolean;
+  onSave: (market: MarketForm) => Promise<boolean>;
+  onDelete: (market: Market) => void;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState<MarketForm>(emptyMarket);
+  const update = (key: keyof MarketForm, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const saved = await onSave(form);
+    if (saved) setForm(emptyMarket);
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal wide-modal">
+        <div className="panel-head">
+          <h2>Markets</h2>
+          <button className="btn ghost" onClick={onClose}>Close</button>
+        </div>
+        <div className="modal-content">
+          <form className="market-form" onSubmit={submit}>
+            <div className="grid-2">
+              <Field label="Market name *" value={form.name} onChange={(value) => update('name', value)} required />
+              <Field label="Market ID *" value={form.market_id} onChange={(value) => update('market_id', value)} required />
+              <Field label="Start date *" type="date" value={form.start_date} onChange={(value) => update('start_date', value)} required />
+              <label className="check-field">
+                <input type="checkbox" checked={form.is_active} onChange={(event) => update('is_active', event.target.checked)} />
+                <span>Active market</span>
+              </label>
+            </div>
+            <div className="form-actions">
+              {form.id && <button type="button" className="btn" onClick={() => setForm(emptyMarket)}>New Market</button>}
+              <button className="btn primary" disabled={busy}>{busy ? 'Saving...' : form.id ? 'Save Market' : 'Create Market'}</button>
+            </div>
+          </form>
+
+          <div className="market-list">
+            {markets.length === 0 ? (
+              <div className="empty">No markets yet.</div>
+            ) : (
+              markets.map((market) => (
+                <div className="market-row" key={market.id}>
+                  <div>
+                    <strong>{market.name}</strong>
+                    <small>{market.market_id} | Starts {displayDate(market.start_date)} | {market.is_active ? 'Active' : 'Inactive'}</small>
+                  </div>
+                  <div className="product-actions">
+                    <button className="btn ghost small-btn" disabled={busy} onClick={() => setForm({
+                      id: market.id,
+                      market_id: market.market_id,
+                      name: market.name,
+                      start_date: market.start_date,
+                      is_active: market.is_active,
+                    })}>Edit</button>
+                    <button className="btn danger small-btn" disabled={busy} onClick={() => onDelete(market)}>Delete</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductModal({
+  product,
+  products,
+  busy,
+  onSave,
+  onClose,
+}: {
+  product: ProductForm;
+  products: Product[];
+  busy: boolean;
+  onSave: (product: ProductForm) => void;
+  onClose: () => void;
+}) {
   const [form, setForm] = useState(product);
   const update = (key: keyof ProductForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const skuPreview = form.id ? form.sku : getNextSku(form.product_segment, products);
 
   return (
     <div className="modal-backdrop">
@@ -775,7 +1008,16 @@ function ProductModal({ product, busy, onSave, onClose }: { product: ProductForm
         <form onSubmit={(event) => { event.preventDefault(); onSave(form); }}>
           <div className="grid-2">
             <Field label="Product name *" value={form.name} onChange={(value) => update('name', value)} required />
-            <Field label="SKU *" value={form.sku} onChange={(value) => update('sku', value)} required />
+            <div className="field">
+              <label>Product segment *</label>
+              <select value={form.product_segment} onChange={(event) => update('product_segment', event.target.value)} required>
+                {PRODUCT_SEGMENTS.map((segment) => <option key={segment}>{segment}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>SKU</label>
+              <input readOnly value={skuPreview} />
+            </div>
             <Field label="Size" value={form.size} onChange={(value) => update('size', value)} />
             <Field label="Variation" value={form.variation} onChange={(value) => update('variation', value)} />
             <Field label="Price *" type="number" min="0" value={form.price} onChange={(value) => update('price', value)} required />
@@ -975,7 +1217,21 @@ function ProductAutocomplete({
   );
 }
 
-function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderForm; products: Product[]; busy: boolean; onSave: (order: OrderForm) => void; onClose: () => void }) {
+function OrderModal({
+  order,
+  products,
+  markets,
+  busy,
+  onSave,
+  onClose,
+}: {
+  order: OrderForm;
+  products: Product[];
+  markets: Market[];
+  busy: boolean;
+  onSave: (order: OrderForm) => void;
+  onClose: () => void;
+}) {
   const [form, setForm] = useState(order);
   const [focusedProductRow, setFocusedProductRow] = useState<number | null>(null);
   const update = (key: keyof OrderForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
@@ -1059,6 +1315,15 @@ function OrderModal({ order, products, busy, onSave, onClose }: { order: OrderFo
           </div>
 
           <div className="grid-2">
+            <div className="field">
+              <label>Market *</label>
+              <select value={form.market_id} onChange={(event) => update('market_id', event.target.value)} required>
+                <option value="" disabled>Choose market</option>
+                {markets.map((market) => (
+                  <option key={market.id} value={market.id}>{market.name}{market.is_active ? '' : ' (inactive)'}</option>
+                ))}
+              </select>
+            </div>
             <div className="field">
               <label>Order status *</label>
               <select value={form.status} onChange={(event) => update('status', event.target.value)} required>

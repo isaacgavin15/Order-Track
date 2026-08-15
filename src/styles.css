@@ -240,13 +240,33 @@ main {
 
 .date-filter {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) auto;
+  grid-template-columns: minmax(170px, 1fr);
   gap: 10px;
   align-items: end;
 }
 
 .order-search {
   min-width: 220px;
+}
+
+.advanced-filters {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.advanced-filters summary {
+  color: var(--brand-dark);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.advanced-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
 }
 
 .daily-stats {
@@ -492,6 +512,50 @@ main {
   justify-content: flex-end;
   gap: 6px;
   margin-top: 6px;
+}
+
+.market-form {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.market-list {
+  display: grid;
+  gap: 9px;
+}
+
+.market-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.market-row strong,
+.market-row small {
+  display: block;
+}
+
+.market-row small {
+  color: var(--muted);
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  color: var(--brand-dark);
+  font-weight: 800;
+}
+
+.check-field input {
+  width: 18px;
+  height: 18px;
 }
 
 .pager {
@@ -841,7 +905,9 @@ main {
   }
 
   .order-controls,
-  .date-filter {
+  .date-filter,
+  .advanced-filter-grid,
+  .market-row {
     display: grid;
     grid-template-columns: 1fr;
   }
