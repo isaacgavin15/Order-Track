@@ -96,8 +96,21 @@ button:disabled {
 .actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: end;
   gap: 10px;
   justify-content: flex-end;
+}
+
+.ongoing-market {
+  min-width: 190px;
+}
+
+.ongoing-market label {
+  font-size: 12px;
+}
+
+.ongoing-market select {
+  min-height: 42px;
 }
 
 .btn {
@@ -888,6 +901,10 @@ main {
 
   .actions {
     justify-content: stretch;
+  }
+
+  .ongoing-market {
+    flex: 1 1 100%;
   }
 
   .actions .btn,

@@ -11,6 +11,7 @@ const PRODUCT_SEGMENT_PREFIX: Record<ProductSegment, string> = {
   'Chonky Club': 'CC',
   'Bocah Hompimpah Club': 'BCH',
 };
+const ONGOING_MARKET_STORAGE_KEY = 'hompimpah-ongoing-market-id';
 const PRODUCTS_PER_PAGE = 10;
 const ORDERS_PER_LOAD = 10;
 const INDONESIA_LOCALE = 'id-ID';
@@ -243,6 +244,7 @@ function AdminApp() {
   const [marketFilter, setMarketFilter] = useState('');
   const [rangeStartFilter, setRangeStartFilter] = useState('');
   const [rangeEndFilter, setRangeEndFilter] = useState('');
+  const [selectedMarketId, setSelectedMarketId] = useState(() => window.localStorage.getItem(ONGOING_MARKET_STORAGE_KEY) || '');
   const [visibleOrderCount, setVisibleOrderCount] = useState(ORDERS_PER_LOAD);
   const [orderModal, setOrderModal] = useState<OrderForm | null>(null);
   const [productModal, setProductModal] = useState<ProductForm | null>(null);
@@ -320,8 +322,26 @@ function AdminApp() {
   const currentProductPage = Math.min(productPage, productPageCount);
   const paginatedProducts = filteredProducts.slice((currentProductPage - 1) * PRODUCTS_PER_PAGE, currentProductPage * PRODUCTS_PER_PAGE);
   const activeMarkets = useMemo(() => markets.filter((market) => market.is_active), [markets]);
-  const defaultMarketId = activeMarkets[0]?.id || markets[0]?.id || '';
+  const defaultMarketId = selectedMarketId || activeMarkets[0]?.id || '';
   const hasRangeFilter = Boolean(rangeStartFilter || rangeEndFilter);
+
+  useEffect(() => {
+    if (activeMarkets.length === 0) {
+      if (selectedMarketId) setSelectedMarketId('');
+      return;
+    }
+
+    const savedMarketIsActive = activeMarkets.some((market) => market.id === selectedMarketId);
+    if (!savedMarketIsActive) setSelectedMarketId(activeMarkets[0].id);
+  }, [activeMarkets, selectedMarketId]);
+
+  useEffect(() => {
+    if (selectedMarketId) {
+      window.localStorage.setItem(ONGOING_MARKET_STORAGE_KEY, selectedMarketId);
+    } else {
+      window.localStorage.removeItem(ONGOING_MARKET_STORAGE_KEY);
+    }
+  }, [selectedMarketId]);
 
   const filteredOrders = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -573,10 +593,20 @@ function AdminApp() {
           <p>Order and merch stock tracking for fast-paced selling.</p>
         </div>
         <div className="actions">
+          {activeMarkets.length > 0 && (
+            <div className="field ongoing-market">
+              <label>Ongoing market</label>
+              <select value={selectedMarketId} onChange={(event) => setSelectedMarketId(event.target.value)}>
+                {activeMarkets.map((market) => (
+                  <option key={market.id} value={market.id}>{market.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button className="btn" onClick={() => setMarketModal(true)}>Markets</button>
           <button className="btn" onClick={() => setBulkProductModal(true)}>Bulk Upload</button>
           <button className="btn" onClick={() => setProductModal({ ...emptyProduct })}>+ Product</button>
-          <button className="btn primary" disabled={products.length === 0 || markets.length === 0} onClick={() => setOrderModal(createEmptyOrder(defaultMarketId))}>+ Order</button>
+          <button className="btn primary" disabled={products.length === 0 || !defaultMarketId} onClick={() => setOrderModal(createEmptyOrder(defaultMarketId))}>+ Order</button>
           <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
         </div>
       </header>
